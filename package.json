@@ -1,0 +1,16 @@
+{
+  "name": "ai-magic-wand",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local, self-contained AI Magic Wand (MediaPipe Interactive Segmenter v2 / Magic Touch)",
+  "scripts": {
+    "postinstall": "node scripts/setup.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1"
+  },
+  "devDependencies": {
+    "serve": "^14.2.1"
+  }
+}
