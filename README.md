@@ -132,7 +132,6 @@ Open the printed URL in your browser.
 ├── mwandtool.html              # Main application page
 ├── package.json
 ├── server.js                   # Node.js static server + save API
-├── ref-boundaries.md           # MediaPipe API reference index
 ├── assets/                     # (created by postinstall)
 │   └── interactive_segmentation.task
 ├── vendor/                     # (created by postinstall)
