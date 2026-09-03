@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>AI Magic Wand</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #181818;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+/* =========================================================
+   TOOLBAR
+========================================================= */
+
+#toolbar {
+    height: 64px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: #252525;
+    border-bottom: 1px solid #444;
+    position: relative;
+    z-index: 20;
+}
+
+button,
+.file-button {
+    height: 38px;
+    padding: 0 14px;
+    border: 1px solid #555;
+    border-radius: 6px;
+    background: #333;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+button:hover,
+.file-button:hover {
+    background: #444;
+}
+
+button.active {
+    background: #555;
+    border-color: #aaa;
+}
+
+button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+button.busy {
+    position: relative;
+    pointer-events: none;
+}
+
+button.busy::before {
+    content: "";
+    width: 13px;
+    height: 13px;
+    margin-right: 7px;
+    border: 2px solid #666;
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+}
+
+button.mode-active {
+    background: #666;
+    border-color: #ddd;
+}
+
+#fileInput {
+    display: none;
+}
+
+/* =========================================================
+   EXPORT CONTROLS
+========================================================= */
+
+.export-control {
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #aaa;
+    font-size: 11px;
+}
+
+.export-control select {
+    height: 32px;
+    border: 1px solid #555;
+    border-radius: 5px;
+    background: #333;
+    color: #fff;
+    padding: 0 6px;
+}
+
+.export-control select:disabled {
+    opacity: .4;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+#status-area {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 240px;
+    justify-content: flex-end;
+}
+
+#spinner {
+    width: 17px;
+    height: 17px;
+    border: 2px solid #555;
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: none;
+}
+
+#spinner.visible {
+    display: block;
+}
+
+#status {
+    color: #aaa;
+    font-size: 13px;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* =========================================================
+   WORKSPACE
+========================================================= */
+
+#workspace {
+    width: 100%;
+    height: calc(100% - 64px);
+    overflow: auto;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    padding: 25px;
+    background: #f0f0f0;
+}
+
+#stage {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+    background: #fff;
+    min-width: 400px;
+    min-height: 300px;
+}
+
+#image {
+    display: block;
+
+    max-width: 90vw;
+    max-height: 82vh;
+
+    width: auto;
+    height: auto;
+
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+#compositeCanvas,
+#maskCanvas,
+#interactionCanvas {
+    position: absolute;
+    left: 0;
+    top: 0;
+
+    width: 100%;
+    height: 100%;
+}
+
+#compositeCanvas {
+    pointer-events: none;
+    display: none;
+}
+
+#stage.deleted-mode #image {
+    visibility: hidden;
+}
+
+#stage.deleted-mode #compositeCanvas {
+    display: block;
+}
+
+#maskCanvas {
+    pointer-events: none;
+}
+
+#interactionCanvas {
+    touch-action: none;
+    cursor: crosshair;
+}
+
+/* =========================================================
+   LAYERS MODE (draggable cutout + transparent-hole background)
+========================================================= */
+
+#stage.layers-mode {
+    background-image:
+        linear-gradient(45deg, #ccc 25%, transparent 25%),
+        linear-gradient(-45deg, #ccc 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ccc 75%),
+        linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    background-color: #f0f0f0;
+}
+
+/* Dynamic layer canvases injected by JS in layers-mode */
+
+#stage.layers-mode #image,
+#stage.layers-mode #compositeCanvas,
+#stage.layers-mode #maskCanvas,
+#stage.layers-mode #interactionCanvas {
+    display: none;
+}
+
+#stage.layers-mode .layer-canvas {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#stage.layers-mode .layer-canvas.dragging {
+    cursor: grabbing;
+}
+
+/* =========================================================
+   HINT
+========================================================= */
+
+#hint {
+    position: fixed;
+    left: 50%;
+    bottom: 20px;
+
+    transform: translateX(-50%);
+
+    padding: 10px 16px;
+
+    background: rgba(0,0,0,.8);
+    border-radius: 7px;
+
+    color: #ddd;
+
+    font-size: 13px;
+
+    z-index: 30;
+
+    pointer-events: none;
+}
+
+/* =========================================================
+   LOADING SCREEN
+========================================================= */
+
+#event-lock {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(0,0,0,.58);
+    backdrop-filter: blur(2px);
+    cursor: wait;
+    pointer-events: all;
+}
+#event-lock.visible { display: flex; }
+#event-lock-spinner {
+    width: 44px; height: 44px;
+    border: 4px solid #444; border-top-color: #fff;
+    border-radius: 50%; animation: spin .75s linear infinite;
+}
+#event-lock-message { color: #eee; font-size: 14px; }
+#event-lock-progress-container { width: 300px; height: 6px; background: #333; border-radius: 10px; overflow: hidden; }
+#event-lock-progress { width: 0%; height: 100%; background: #fff; transition: width .15s ease; }
+
+#loading-screen {
+    position: fixed;
+    inset: 0;
+
+    z-index: 100;
+
+    background: #111;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#loading-screen.hidden {
+    display: none;
+}
+
+.loading-spinner {
+    width: 52px;
+    height: 52px;
+
+    border: 4px solid #444;
+    border-top-color: white;
+
+    border-radius: 50%;
+
+    animation: spin .75s linear infinite;
+
+    margin-bottom: 22px;
+}
+
+#loading-title {
+    font-size: 21px;
+    margin-bottom: 8px;
+}
+
+#loading-message {
+    color: #999;
+    font-size: 14px;
+
+    text-align: center;
+
+    max-width: 600px;
+
+    margin-bottom: 18px;
+}
+
+#progress-container {
+    width: 320px;
+    height: 6px;
+
+    background: #333;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+}
+
+#progress {
+    width: 0%;
+    height: 100%;
+
+    background: white;
+
+    transition: width .2s ease;
+}
+
+/* =========================================================
+   ERROR
+========================================================= */
+
+#error-box {
+    position: fixed;
+
+    left: 50%;
+    top: 50%;
+
+    transform: translate(-50%, -50%);
+
+    width: min(700px, 90vw);
+
+    background: #241414;
+
+    border: 1px solid #713333;
+
+    border-radius: 8px;
+
+    padding: 18px;
+
+    z-index: 200;
+
+    display: none;
+}
+
+#error-box.visible {
+    display: block;
+}
+
+#error-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+#error-message {
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+body.processing-cursor,
+body.processing-cursor * {
+    cursor: wait !important;
+}
+
+#add-confirm-modal, .delete-confirm-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.62);
+    backdrop-filter: blur(3px);
+}
+
+#add-confirm-modal.visible, .delete-confirm-modal.visible {
+    display: flex;
+}
+
+.add-confirm-card, .delete-confirm-card {
+    width: min(440px, calc(100vw - 32px));
+    padding: 24px;
+    border: 1px solid #444;
+    border-radius: 14px;
+    background: #171717;
+    color: #fff;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+}
+
+.add-confirm-card h3, .delete-confirm-card h3 { margin: 0 0 10px; }
+.add-confirm-card p, .delete-confirm-card p { color: #c9c9c9; line-height: 1.5; margin: 0 0 20px; }
+.add-confirm-actions, .delete-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.add-confirm-actions button, .delete-confirm-actions button { padding: 9px 14px; border-radius: 8px; border: 1px solid #555; }
+#deleteObjectButton:not(:disabled) { cursor: pointer; }
+</style>
+</head>
+
+<body>
+
+<!-- =======================================================
+     TOOLBAR
+======================================================= -->
+
+<div id="toolbar">
+
+    <label class="file-button">
+        Load Image
+
+        <input
+            id="fileInput"
+            type="file"
+            accept="image/*"
+        >
+    </label>
+
+    <button
+        id="addButton"
+        class="active"
+        disabled
+    >
+        🟢 Add
+    </button>
+
+    <button
+        id="removeButton"
+        disabled
+    >
+        🔴 Remove
+    </button>
+
+    <button
+        id="lassoButton"
+        disabled
+    >
+        🔵 Lasso
+    </button>
+
+    <button
+        id="multiSelectButton"
+        disabled
+    >
+        ＋ Multi Select
+    </button>
+
+    <button
+        id="sendAiButton"
+        disabled
+    >
+        ✨ Send to AI
+    </button>
+
+    <button
+        id="customSelectButton"
+        disabled
+    >
+        ✦ Custom Select
+    </button>
+
+    <button
+        id="addSelectionButton"
+        disabled
+    >
+        ＋ Add Selection
+    </button>
+
+    <button
+        id="clearButton"
+        disabled
+    >
+        Clear
+    </button>
+
+    <button
+        id="deleteObjectButton"
+        disabled
+        title="Delete the currently selected object from the canvas"
+    >
+        🗑 Delete Object
+    </button>
+
+    <label class="export-control">
+        <span>Format</span>
+        <select id="exportFormat" disabled>
+            <option value="png">PNG</option>
+            <option value="jpeg">JPG</option>
+            <option value="webp">WebP</option>
+        </select>
+    </label>
+
+    <label class="export-control">
+        <span>Quality</span>
+        <select id="exportQuality" disabled>
+            <option value="1">100%</option>
+            <option value="0.9" selected>90%</option>
+            <option value="0.8">80%</option>
+            <option value="0.7">70%</option>
+            <option value="0.5">50%</option>
+        </select>
+    </label>
+
+    <button
+        id="downloadButton"
+        disabled
+    >
+        ⬇ Export
+    </button>
+
+    <button
+        id="layersButton"
+        disabled
+    >
+        🧩 Split Layers
+    </button>
+
+    <button
+        id="resetLayerPositionButton"
+        disabled
+        style="display: none;"
+    >
+        ↺ Reset Position
+    </button>
+
+    <button
+        id="exitLayersButton"
+        disabled
+        style="display: none;"
+    >
+        ← Back to Edit
+    </button>
+
+    <div id="status-area">
+
+        <div id="spinner"></div>
+
+        <div id="status">
+            Loading AI...
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =======================================================
+     WORKSPACE
+======================================================= -->
+
+<div id="workspace">
+
+    <div id="stage">
+
+        <img
+            id="image"
+            alt=""
+            draggable="false"
+        >
+
+        <canvas
+            id="compositeCanvas"
+        ></canvas>
+
+        <canvas
+            id="maskCanvas"
+        ></canvas>
+
+        <canvas
+            id="interactionCanvas"
+        ></canvas>
+
+        <!-- Dynamic layer canvases created by JS -->
+
+    </div>
+
+</div>
+
+
+<div id="hint">
+    Loading AI...
+</div>
+
+
+<div id="add-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="add-confirm-title">
+    <div class="add-confirm-card">
+        <h3 id="add-confirm-title">Select object at this location?</h3>
+        <p>This will select the pointed object as a whole — no drawing area needed.</p>
+        <div class="add-confirm-actions">
+            <button id="add-confirm-cancel" type="button">Cancel</button>
+            <button id="add-confirm-proceed" type="button">Select Object</button>
+        </div>
+    </div>
+</div>
+
+<div id="delete-confirm-modal" class="delete-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+    <div class="delete-confirm-card">
+        <h3 id="delete-confirm-title">Delete this object?</h3>
+        <p>The selected object will be permanently removed from the canvas. This cannot be undone.</p>
+        <div class="delete-confirm-actions">
+            <button id="delete-confirm-cancel" type="button">Cancel</button>
+            <button id="delete-confirm-proceed" type="button">🗑 Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="event-lock" aria-live="polite" aria-busy="true">
+    <div id="event-lock-spinner"></div>
+    <div id="event-lock-message">Processing...</div>
+    <div id="event-lock-progress-container"><div id="event-lock-progress"></div></div>
+</div>
+
+<!-- =======================================================
+     LOADING
+======================================================= -->
+
+<div id="loading-screen">
+
+    <div class="loading-spinner"></div>
+
+    <div id="loading-title">
+        Loading AI Object Selector
+    </div>
+
+    <div id="loading-message">
+        Starting MediaPipe...
+    </div>
+
+    <div id="progress-container">
+
+        <div id="progress"></div>
+
+    </div>
+
+</div>
+
+
+<!-- =======================================================
+     ERROR
+======================================================= -->
+
+<div id="error-box">
+
+    <div id="error-title">
+        Error
+    </div>
+
+    <div id="error-message"></div>
+
+</div>
+
+
+<script type="module" src="./scripts/setup.js"></script>
+
+</body>
+</html>
